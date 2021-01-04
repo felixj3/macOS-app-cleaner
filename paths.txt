@@ -1,0 +1,13 @@
+/Applications/
+/Library/
+/Library/Frameworks/
+/Library/Application Support/
+~/Library/
+~/Library/Application Support/
+~/Library/Caches/
+~/Library/Containers/
+~/Library/Frameworks/
+~/Library/Logs/
+~/Library/Preferences/
+~/Library/Saved Application State/
+~/Library/WebKit/

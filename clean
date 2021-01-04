@@ -1,0 +1,140 @@
+#!/bin/bash
+
+# Copyright (C) 2021 felixj3
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+# Functions
+clean_up() {
+	if [[ "$temp_file_path" == "possible_paths."* ]]; then
+		echo "SIGINT received. Removing $temp_file_path"
+		rm "$temp_file_path"
+		echo ""
+	fi
+	exit
+}
+
+trap clean_up SIGINT
+
+# VALUES
+# set path to file that holds paths
+paths_file="paths.txt"
+
+# set path to file that holds move history
+move_history="history.txt"
+
+# date for history file
+curr_date="$(date +"%x %r %Z")"
+
+# constant for user's trash path
+TRASH="${HOME}/.Trash"
+
+# check if pretend specified
+pretend=
+
+# positional parameters and usage
+usage="usage: $(basename "$0") [-h | -p]
+where:
+	-h or --help: show this help text
+	-p or --pretend: run script normally except files will not actually be moved into trash"
+
+while [ "$1" != "" ]; do
+	case $1 in
+		-p | --pretend )	pretend="1" # anything that isn't empty
+					;;
+		-h | --help )		echo "$usage"
+					exit 0
+					;;
+		* )			echo "$usage"
+					exit 1
+					;;
+	esac
+	shift
+done
+
+echo "Path to your trash folder: $TRASH"
+
+# receive application name
+read -p "Enter Application Name To Clean > " application
+if [ "$application" = "*" ]; then
+	# since * is surrounded by quotes, it is literally the star character, and not a wildcard for matching anything		
+	echo "Oops! You probably don't want to move all of the files under the directories this program searches into the trash"
+	exit 0
+elif [ -z "$application" ]; then
+	echo "Please enter an application name"
+	exit 0
+fi
+echo "You entered: $application"
+echo ""
+
+# create temporary place for file paths
+temp_file_path=$(mktemp possible_paths.XXXXX)
+echo "created temp file: $temp_file_path for holding possible paths"
+ls -l
+echo "-------------------------------------------------------------"
+
+# place paths into file
+while read path; do
+	# need to expand any path that includes home directory as ~
+	home_expanded=$path # in case nothing to expand
+	if [[ $path == *~* ]] ; then
+		home_expanded="${path//\~}"
+		home_expanded="${HOME}${home_expanded}"
+	fi
+	
+	echo "Looking through: ${home_expanded}"
+	find "${home_expanded}" -iname "*${application}*" -maxdepth 1 >>  $temp_file_path
+done <"$paths_file"
+
+# show paths we are moving to trash
+echo "------------------------------------"
+echo "Moving the following paths to trash (after confirmation):"
+cat $temp_file_path
+echo "------------------------------------"
+
+# append timestamp to history
+echo "$curr_date" >> "$move_history"
+
+# move each path into trash, where "path" is just a placeholder
+while read path; do
+	file_size="$(du -k "$path" | tail -n 1 | cut -f1)"
+	read -p "Move $path ("$file_size" kB) to trash? (y/n) > " response < /dev/tty
+	if [ "$response" = "y" ]; then
+		if [ -z "$pretend" ]; then
+			mv "$path" "$TRASH"
+			echo "Moved $path to $TRASH"
+			echo "mv "$path" "$TRASH"" >> "$move_history"
+		else
+			echo "PRETEND: $path would have been moved into $TRASH"
+		fi
+		echo ""
+	else
+		echo "Did not move $path to $TRASH"
+		echo ""
+	fi
+done <"$temp_file_path"
+
+if [ -s "$temp_file_path" ]; then
+	echo "All files/directories handled"
+else
+	echo "No files/directories matching your application name were found"
+fi
+
+# delete temp file once program ends
+if [[ "$temp_file_path" == "possible_paths."* ]]; then
+	echo "removing $temp_file_path"
+	rm "$temp_file_path"
+fi
+echo ""
